@@ -5,7 +5,7 @@
 #  (c) 2016 Tobias D. Oestreicher
 #
 #  
-#  Connect fhem to Windhager RC7030 
+#  Connect fhem to Mediola GW 
 #  inspired by 59_PROPLANTA.pm
 #
 #  Copyright notice
@@ -124,13 +124,18 @@ sub MEDIOLA_Define($$) {
         $hash->{fhem}{LOCAL}     = 0;
         $hash->{VERSION}         = $version;
 
-#    $hash->{AttrList} = "download:0,1 ".
-#                            "savepath ".
-#                        $readingFnAttributes;
-
 
         RemoveInternalTimer($hash);
-       
+ 
+    	$hash->{helper}{RUNNING_PID} =
+        BlockingCall( 
+            "MEDIOLA_Run",          # callback worker task
+            $name,              # name of the device
+            "MEDIOLA_Done",         # callback result method
+            120,                # timeout seconds
+            "MEDIOLA_Aborted",      #  callback for abortion
+            $hash );            # parameter for abortion
+      
         #Get first data after 12 seconds
         InternalTimer( gettimeofday() + 12, "MEDIOLA_Start", $hash, 0 );
    
@@ -160,7 +165,7 @@ sub MEDIOLA_Get($@) {
     return $noarg if ( @a < 1 );
 
     my $cmd = lc( $a[1] );
-    MEDIOLA_Log $hash, 1, "get command: " . $cmd;
+    MEDIOLA_Log $hash, 5, "get command: " . $cmd;
     if ( "$cmd" eq "learncode" ) {
 
         my $ua = new LWP::UserAgent();
@@ -234,10 +239,13 @@ sub MEDIOLA_Set($@) {
 
     my $ua = new LWP::UserAgent();
     my $url = 'http://'.$hash->{IP}.'/command?XC_FNC=Send2&code='.$cmd.'&ir='.$MEDIOLA_ir.'&rf='.$MEDIOLA_rf;
-    MEDIOLA_Log $hash, 1, "set url: " . $url;
+    MEDIOLA_Log $hash, 3, "set url: " . $url;
     my $httpresp = $ua->get($url);
+    MEDIOLA_Log $hash, 3, $httpresp->content;
+    MEDIOLA_Log $hash, 3, $httpresp->is_success;
     return "MediolaGW not reachable, please verify configuration and connection" unless $httpresp->is_success;
-    return $httpresp->content;
+    #return $httpresp->content;
+    return "OK";
 }
 
 
@@ -259,14 +267,6 @@ sub MEDIOLA_Start($) {
     }
 
   
-    $hash->{helper}{RUNNING_PID} =
-        BlockingCall( 
-            "MEDIOLA_Run",          # callback worker task
-            $name,              # name of the device
-            "MEDIOLA_Done",         # callback result method
-            120,                # timeout seconds
-            "MEDIOLA_Aborted",      #  callback for abortion
-            $hash );            # parameter for abortion
 }
 
 #####################################
@@ -334,16 +334,16 @@ sub MEDIOLA_Run($) {
         $con->recv(my $datagram,300);
         
         close($con);
-        MEDIOLA_Log $hash, 3, length($datagram);
+        MEDIOLA_Log $hash, 5, length($datagram);
         foreach (split(/\n/,$datagram)) {
             my ($fldname, $fldvalue) = (split(/\:/,$_))[0,1];
-            MEDIOLA_Log $hash, 1, "Current:".$fldname;
+            MEDIOLA_Log $hash, 5, "Current:".$fldname;
             if (index("$fldname", "DHCP") != -1) {
                 $message .= lc "DHCP|";
         	    $message .= "$fldvalue|";
-                MEDIOLA_Log $hash, 1, "Set(DHCP):".$fldname." to: ".$fldvalue;
+                MEDIOLA_Log $hash, 5, "Set(DHCP):".$fldname." to: ".$fldvalue;
             } else {
-                MEDIOLA_Log $hash, 1, "Set:".$fldname." to: ".$fldvalue;
+                MEDIOLA_Log $hash, 5, "Set:".$fldname." to: ".$fldvalue;
                 $message .= lc "$fldname|";
                 $message .= "$fldvalue|";
             }
@@ -356,13 +356,8 @@ sub MEDIOLA_Run($) {
     $message .= "durationFetchReadings|";
     $message .= sprintf "%.2f",  time() - $readingStartTime;
     
-    MEDIOLA_Log $hash, 3, "Done fetching data";
-    MEDIOLA_Log $hash, 3, "Will return : "."$name|$message" ;
-#    if ( $is_reachable == 0 ) {
-#	    $hash->{STATE} = "Offline";
-#    } else {
-#	    $hash->{STATE} = "Online";
-#    }
+    MEDIOLA_Log $hash, 5, "Done fetching data";
+    MEDIOLA_Log $hash, 5, "Will return : "."$name|$message" ;
     return "$name|$message" ;
 }
 
@@ -400,7 +395,7 @@ sub MEDIOLA_Run($) {
 =pod
 
 =item device
-=item summary       create pvr listing from kodi
+=item summary       integrate simple usage of MediolaGW
 
 =begin html
 
