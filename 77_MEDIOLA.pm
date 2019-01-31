@@ -243,8 +243,11 @@ sub MEDIOLA_Set($@) {
     my $httpresp = $ua->get($url);
     MEDIOLA_Log $hash, 3, $httpresp->content;
     MEDIOLA_Log $hash, 3, $httpresp->is_success;
+    readingsSingleUpdate($hash, "lastcmd", $a[1], 1);
+    readingsSingleUpdate($hash, "state", "ERROR", 1) unless $httpresp->is_success;
     return "MediolaGW not reachable, please verify configuration and connection" unless $httpresp->is_success;
     #return $httpresp->content;
+    readingsSingleUpdate($hash, "state", "OK", 1);
     return "OK";
 }
 
